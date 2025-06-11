@@ -2,108 +2,118 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "../hooks/useAuth";
+import { useFirebaseFunctions } from "../hooks/useFirebaseFunctions";
 
 export default function Dashboard() {
   const [documents, setDocuments] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("documents"); // "documents" or "assignments"
-  const [documentFilter, setDocumentFilter] = useState("all"); // "all", "pending", "done"
-  const [assignmentFilter, setAssignmentFilter] = useState("all"); // "all", "pending", "done"
-  const router = useRouter();
+  const [activeTab, setActiveTab] = useState("documents");
+  const [documentFilter, setDocumentFilter] = useState("all");
+  const [assignmentFilter, setAssignmentFilter] = useState("all");
+  const [error, setError] = useState("");
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const {
+    getUserSubmissions,
+    getLectorSubmissions,
+    loading: functionsLoading,
+    error: functionsError,
+  } = useFirebaseFunctions();
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Check if user was redirected from successful upload
+    if (searchParams.get("upload") === "success") {
+      setShowSuccessMessage(true);
+      // Hide message after 5 seconds
+      setTimeout(() => setShowSuccessMessage(false), 5000);
+      // Clean up URL
+      router.replace("/dashboard", undefined, { shallow: true });
+    }
+  }, [searchParams, router]);
 
-      // Mock documents data (user's uploaded documents)
-      setDocuments([
-        {
-          id: 1,
-          fileName: "Business_Plan_2024.pdf",
-          fileType: "PDF",
-          uploadDate: "2024-03-15",
-          status: "Pending",
-          lectorName: "Dr. Smith",
-          fileSize: "2.4 MB",
-        },
-        {
-          id: 2,
-          fileName: "Marketing_Strategy.docx",
-          fileType: "Word",
-          uploadDate: "2024-03-10",
-          status: "Done",
-          lectorName: "Prof. Johnson",
-          fileSize: "1.8 MB",
-        },
-        {
-          id: 3,
-          fileName: "Project_Proposal.txt",
-          fileType: "Text",
-          uploadDate: "2024-03-08",
-          status: "Pending",
-          lectorName: "-",
-          fileSize: "45 KB",
-        },
-      ]);
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
-      // Mock assignments data (lector's assigned reviews)
-      setAssignments([
-        {
-          id: 1,
-          fileName: "Business_Plan_2024.pdf",
-          fileType: "PDF",
-          assignedDate: "2024-03-15",
-          dueDate: "2026-03-22",
-          status: "Pending",
-          clientName: "John Doe",
-          fileSize: "2.4 MB",
-          description: "Comprehensive business plan review for startup funding",
-        },
-        {
-          id: 2,
-          fileName: "Research_Paper_Draft.docx",
-          fileType: "Word",
-          assignedDate: "2024-03-14",
-          dueDate: "2024-03-20",
-          status: "Pending",
-          clientName: "Sarah Wilson",
-          fileSize: "3.1 MB",
-          description: "Academic paper review for publication",
-        },
-        {
-          id: 3,
-          fileName: "Contract_Analysis.pdf",
-          fileType: "PDF",
-          assignedDate: "2024-03-10",
-          dueDate: "2024-03-18",
-          status: "Done",
-          clientName: "Mike Johnson",
-          fileSize: "1.8 MB",
-          description: "Legal contract review and analysis",
-        },
-        {
-          id: 4,
-          fileName: "Technical_Specification.txt",
-          fileType: "Text",
-          assignedDate: "2024-03-12",
-          dueDate: "2024-03-19",
-          status: "Pending",
-          clientName: "Emily Davis",
-          fileSize: "156 KB",
-          description: "Software technical specification review",
-        },
-      ]);
+  const fetchData = async () => {
+    if (!user) return;
 
+    setIsLoading(true);
+    setError("");
+
+    try {
+      // Fetch both user submissions and lector assignments in parallel
+      const [userSubmissionsResult, lectorSubmissionsResult] =
+        await Promise.allSettled([
+          getUserSubmissions(),
+          getLectorSubmissions(),
+        ]);
+
+      // Handle user's documents 
+      if (userSubmissionsResult.status === "fulfilled") {
+        const formattedDocuments = userSubmissionsResult.value.map(
+          (submission) => ({
+            id: submission.id,
+            fileName: submission.fileName,
+            fileType: getFileTypeFromName(submission.fileName),
+            uploadDate: formatDate(submission.createdAt),
+            status: submission.status === "pending" ? "Pending" : "Done",
+            lectorId: submission.lectorId,
+            fileSize: formatFileSize(submission.size),
+            notes: submission.notes || "",
+            filePath: submission.filePath,
+            reviewedAt: submission.reviewedAt,
+          })
+        );
+        setDocuments(formattedDocuments);
+      } else {
+        console.error(
+          "Error fetching user submissions:",
+          userSubmissionsResult.reason
+        );
+        setDocuments([]);
+      }
+
+      // Handle lector assignments (documents assigned to user for review)
+      if (lectorSubmissionsResult.status === "fulfilled") {
+        const formattedAssignments = lectorSubmissionsResult.value.map(
+          (submission) => ({
+            id: submission.id,
+            fileName: submission.fileName,
+            fileType: getFileTypeFromName(submission.fileName),
+            assignedDate: formatDate(submission.createdAt),
+            status: submission.status === "pending" ? "Pending" : "Done",
+            userId: submission.userId,
+            fileSize: formatFileSize(submission.size),
+            description: `Document review for ${submission.fileName}`,
+            filePath: submission.filePath,
+            notes: submission.notes || "",
+            reviewedAt: submission.reviewedAt,
+          })
+        );
+        setAssignments(formattedAssignments);
+      } else {
+        console.log(
+          "User has no lector assignments or error occurred:",
+          lectorSubmissionsResult.reason
+        );
+        setAssignments([]);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setError("Failed to load data. Please try refreshing the page.");
+    } finally {
       setIsLoading(false);
-    };
-
-    fetchData();
-  }, []);
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -113,6 +123,25 @@ export default function Dashboard() {
         return "bg-yellow-100 text-yellow-800";
       default:
         return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getFileTypeFromName = (fileName) => {
+    const extension = fileName.split(".").pop().toLowerCase();
+    switch (extension) {
+      case "pdf":
+        return "PDF";
+      case "doc":
+      case "docx":
+        return "Word";
+      case "txt":
+        return "Text";
+      case "rtf":
+        return "RTF";
+      case "odt":
+        return "ODT";
+      default:
+        return "Document";
     }
   };
 
@@ -127,6 +156,34 @@ export default function Dashboard() {
       default:
         return "📁";
     }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return "Unknown size";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "Unknown";
+
+    // Handle Firestore timestamp
+    let date;
+    if (timestamp.toDate) {
+      date = timestamp.toDate();
+    } else if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      date = new Date(timestamp);
+    }
+
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
   };
 
   const filteredDocuments = documents.filter((doc) => {

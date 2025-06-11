@@ -2,27 +2,19 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../hooks/useAuth";
+import { storage } from "../firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 export default function Upload() {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [selectedLector, setSelectedLector] = useState("");
-
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
   const router = useRouter();
-
-  // Mock lectors data
-  const lectors = [
-    {
-      id: 1,
-      name: "Jože Toporišič",
-      specialization: "Language & Linguistics",
-      rating: 4.9,
-      reviews: 156,
-    },
-  ];
+  const { user } = useAuth();
 
   const acceptedFileTypes = ".pdf,.doc,.docx,.txt,.rtf,.odt";
   const maxFileSize = 10 * 1024 * 1024; // 10MB
@@ -121,30 +113,72 @@ export default function Upload() {
       return;
     }
 
-    if (!selectedLector) {
-      setError("Please select a lector");
+    if (!user) {
+      setError("You must be logged in to upload files");
       return;
     }
 
     setIsUploading(true);
     setError("");
+    setUploadProgress(0);
 
     try {
-      // Simulate file upload
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Generate unique filename with timestamp
+      const timestamp = Date.now();
+      const sanitizedFileName = selectedFile.name.replace(
+        /[^a-zA-Z0-9.-]/g,
+        "_"
+      );
+      const fileName = sanitizedFileName;
 
-      // Here you would implement the actual file upload logic
-      console.log("Uploading:", {
-        file: selectedFile,
-        lector: selectedLector,
-        description,
-      });
+      // Create storage reference - this path matches cloud function pattern
+      const storageRef = ref(storage, `uploads/${user.uid}/${fileName}`);
 
-      // Redirect to dashboard after successful upload
-      router.push("/dashboard");
+      // Create upload task
+      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+      // Monitor upload progress
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const progress =
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(Math.round(progress));
+        },
+        (error) => {
+          console.error("Upload error:", error);
+          setError(`Upload failed: ${error.message}`);
+          setIsUploading(false);
+        },
+        async () => {
+          try {
+            // Upload completed successfully
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log(
+              "File uploaded successfully. Download URL:",
+              downloadURL
+            );
+
+            // The onFileUpload cloud function will automatically trigger
+            // and create the submission document in Firestore
+
+            // Show success message and redirect
+            setUploadProgress(100);
+
+            // Wait a moment for the cloud function to process
+            setTimeout(() => {
+              router.push("/dashboard?upload=success");
+            }, 1500);
+          } catch (error) {
+            console.error("Error getting download URL:", error);
+            setError("Upload completed but failed to get download URL");
+            setIsUploading(false);
+          }
+        }
+      );
     } catch (err) {
-      setError("Upload failed. Please try again.");
-    } finally {
+      console.error("Upload error:", err);
+      setError(`Upload failed: ${err.message}`);
       setIsUploading(false);
     }
   };
@@ -153,6 +187,16 @@ export default function Upload() {
     <div className="min-h-screen bg-gray-50">
       {/* Main Content */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Upload Document for Review
+          </h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Upload your document and it will be automatically assigned to an
+            available lector for review.
+          </p>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* File Upload Section */}
           <div className="bg-white shadow sm:rounded-lg">
@@ -191,6 +235,7 @@ export default function Upload() {
                         type="button"
                         onClick={() => setSelectedFile(null)}
                         className="mt-2 text-sm text-red-600 hover:text-red-800"
+                        disabled={isUploading}
                       >
                         Remove file
                       </button>
@@ -224,6 +269,7 @@ export default function Upload() {
                             accept={acceptedFileTypes}
                             onChange={handleFileChange}
                             ref={fileInputRef}
+                            disabled={isUploading}
                           />
                         </label>
                         <p className="pl-1">or drag and drop</p>
@@ -238,49 +284,51 @@ export default function Upload() {
             </div>
           </div>
 
-          {/* Lector Selection */}
-          <div className="bg-white shadow sm:rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Select Lector
-              </h3>
-              <select
-                value={selectedLector}
-                onChange={(e) => setSelectedLector(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                required
-              >
-                <option value="">Choose a lector...</option>
-                {lectors.map((lector) => (
-                  <option key={lector.id} value={lector.id}>
-                    {lector.name} - {lector.specialization} (★{lector.rating} •{" "}
-                    {lector.reviews} reviews)
-                  </option>
-                ))}
-              </select>
-
-              {selectedLector && (
-                <div className="mt-3 p-3 bg-blue-50 rounded-md">
-                  {(() => {
-                    const lector = lectors.find(
-                      (l) => l.id === parseInt(selectedLector)
-                    );
-                    return lector ? (
-                      <div className="text-sm">
-                        <p className="font-medium text-blue-900">
-                          {lector.name}
-                        </p>
-                        <p className="text-blue-700">
-                          Specialization: {lector.specialization}
-                        </p>
-                        <p className="text-blue-600">
-                          Rating: ★{lector.rating} ({lector.reviews} reviews)
-                        </p>
-                      </div>
-                    ) : null;
-                  })()}
+          {/* Upload Progress */}
+          {isUploading && (
+            <div className="bg-white shadow sm:rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Upload Progress
+                </h3>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
                 </div>
-              )}
+                <p className="text-sm text-gray-600 mt-2">
+                  {uploadProgress < 100
+                    ? `Uploading... ${uploadProgress}%`
+                    : "Processing..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Auto-assignment Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-blue-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-blue-700">
+                  <strong>Automatic Assignment:</strong> Your document will be
+                  automatically assigned to an available lector for review.
+                  You'll be able to track the progress in your dashboard.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -297,15 +345,18 @@ export default function Upload() {
               type="button"
               onClick={() => router.push("/dashboard")}
               className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isUploading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isUploading || !selectedFile || !selectedLector}
+              disabled={isUploading || !selectedFile}
               className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isUploading ? "Uploading..." : "Upload Document"}
+              {isUploading
+                ? `Uploading... ${uploadProgress}%`
+                : "Upload Document"}
             </button>
           </div>
         </form>
