@@ -30,8 +30,6 @@ export default function NotificationBell() {
         return "✅";
       case "document_assigned":
         return "📄";
-      case "new_message":
-        return "💬";
       default:
         return "🔔";
     }
@@ -82,7 +80,7 @@ export default function NotificationBell() {
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50">
           <div className="p-4 border-b">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold">Notifications</h3>
+              <h3 className="font-semibold text-black">Notifications</h3>
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
@@ -113,9 +111,9 @@ export default function NotificationBell() {
                       {getNotificationIcon(notification.type)}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">
+                      {/* <p className="font-medium text-sm">
                         {notification.title}
-                      </p>
+                      </p> */}
                       <p className="text-sm text-gray-600 mt-1">
                         {notification.message}
                       </p>
