@@ -484,7 +484,7 @@ export default function Dashboard() {
                           {assignment.status === "Pending" && (
                             <Link
                               href={`/review?id=${assignment.id}`}
-                              className="text-green-600 hover:text-green-800 text-sm font-medium"
+                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                             >
                               Start Review
                             </Link>
