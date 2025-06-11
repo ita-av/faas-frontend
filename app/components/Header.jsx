@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import NotificationBell from "./NotificationBell";
 
 export default function Header() {
   const { user, loading } = useAuth();
@@ -43,13 +44,7 @@ export default function Header() {
               // Logged in state
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-3">
-                  {user.photoURL && (
-                    <img
-                      src={user.photoURL}
-                      alt="Profile"
-                      className="h-8 w-8 rounded-full"
-                    />
-                  )}
+                  <NotificationBell />
                   <span className="text-sm text-gray-600">
                     Welcome, {user.displayName || user.email}
                   </span>

@@ -57,7 +57,7 @@ export default function Dashboard() {
           getLectorSubmissions(),
         ]);
 
-      // Handle user's documents 
+      // Handle user's documents
       if (userSubmissionsResult.status === "fulfilled") {
         const formattedDocuments = userSubmissionsResult.value.map(
           (submission) => ({
@@ -74,6 +74,7 @@ export default function Dashboard() {
           })
         );
         setDocuments(formattedDocuments);
+        // console.log("User submissions fetched successfully:", userSubmissionsResult.value);
       } else {
         console.error(
           "Error fetching user submissions:",
@@ -169,20 +170,46 @@ export default function Dashboard() {
   const formatDate = (timestamp) => {
     if (!timestamp) return "Unknown";
 
-    // Handle Firestore timestamp
     let date;
-    if (timestamp.toDate) {
+
+    // Handle different timestamp formats
+    if (typeof timestamp === "string") {
+      // ISO string from Cloud Functions (e.g., "2025-06-11T16:37:37.000Z")
+      date = new Date(timestamp);
+    } else if (timestamp.toDate && typeof timestamp.toDate === "function") {
+      // Firestore Timestamp object with toDate method
       date = timestamp.toDate();
-    } else if (timestamp.seconds) {
+    } else if (timestamp._seconds !== undefined) {
+      // Firestore Timestamp object with _seconds and _nanoseconds (your case)
+      date = new Date(
+        timestamp._seconds * 1000 + Math.floor(timestamp._nanoseconds / 1000000)
+      );
+    } else if (timestamp.seconds !== undefined) {
+      // Firestore Timestamp-like object with seconds (without underscore)
       date = new Date(timestamp.seconds * 1000);
+    } else if (timestamp instanceof Date) {
+      // Already a Date object
+      date = timestamp;
+    } else if (typeof timestamp === "number") {
+      // Unix timestamp (milliseconds)
+      date = new Date(timestamp);
     } else {
+      // Fallback: try to parse as string
       date = new Date(timestamp);
     }
 
-    return date.toLocaleDateString("en-US", {
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn("Invalid date:", timestamp);
+      return "Invalid Date";
+    }
+
+    return date.toLocaleDateString("de-DE", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
