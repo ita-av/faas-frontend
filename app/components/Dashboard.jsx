@@ -374,25 +374,28 @@ export default function Dashboard() {
                               <span>Uploaded: {doc.uploadDate}</span>
                               <span className="mx-2">•</span>
                               <span>{doc.fileSize}</span>
-                              {doc.lectorName !== "-" && (
+                              {/* {doc.lectorName !== "-" && (
                                 <>
                                   <span className="mx-2">•</span>
                                   <span>Lector: {doc.lectorName}</span>
                                 </>
-                              )}
+                              )} */}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {doc.status === "Pending" && (
+                          {/* {doc.status === "Pending" && (
                             <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
                               View Details
                             </button>
-                          )}
+                          )} */}
                           {doc.status === "Done" && (
-                            <button className="text-green-600 hover:text-green-800 text-sm font-medium">
+                            <Link
+                              href={`/review?id=${doc.id}`}
+                              className="text-green-600 hover:text-green-800 text-sm font-medium"
+                            >
                               View Report
-                            </button>
+                            </Link>
                           )}
                         </div>
                       </div>
@@ -469,25 +472,28 @@ export default function Dashboard() {
                               {assignment.description}
                             </p>
                             <div className="mt-2 flex items-center text-sm text-gray-500">
-                              <span>Client: {assignment.clientName}</span>
+                              <span>Assigned: {assignment.assignedDate}</span>
+                              {/* <span>Client: {assignment.clientName}</span> */}
                               <span className="mx-2">•</span>
                               <span>{assignment.fileSize}</span>
-                              <span className="mx-2">•</span>
-                              <span>Assigned: {assignment.assignedDate}</span>
+                              {/* <span className="mx-2">•</span> */}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           {assignment.status === "Pending" && (
-                            <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                              Review
-                            </button>
+                            <Link
+                              href={`/review?id=${assignment.id}`}
+                              className="text-green-600 hover:text-green-800 text-sm font-medium"
+                            >
+                              Start Review
+                            </Link>
                           )}
-                          {assignment.status === "Done" && (
+                          {/* {assignment.status === "Done" && (
                             <button className="text-green-600 hover:text-green-800 text-sm font-medium">
                               View Report
                             </button>
-                          )}
+                          )} */}
                         </div>
                       </div>
                     </li>
